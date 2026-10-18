@@ -5,10 +5,14 @@ import UploadView from './components/UploadView';
 import ComplianceDashboard from './components/ComplianceDashboard';
 import EvidenceInspector from './components/EvidenceInspector';
 import AuditReportView from './components/AuditReportView';
+import LoginPage from './components/LoginPage';
 import { MOCK_VENDORS } from './data/mockVendors';
 import './App.css';
 
 export default function App() {
+  // Authentication state: user object or null
+  const [currentUser, setCurrentUser] = useState(null);
+
   // Navigation tabs: 'guide' | 'upload' | 'dashboard' | 'inspector' | 'export'
   const [activeTab, setActiveTab] = useState('guide');
   
@@ -21,6 +25,18 @@ export default function App() {
   // Scanning animation states
   const [isScanning, setIsScanning] = useState(false);
   const [scanStage, setScanStage] = useState(1);
+
+  const handleLogin = (userData) => {
+    setCurrentUser(userData);
+  };
+
+  const handleGuestLogin = (guestData) => {
+    setCurrentUser(guestData);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
 
   const handleVendorSelected = (vendor) => {
     setSelectedVendor(vendor);
@@ -41,6 +57,16 @@ export default function App() {
     setActiveTab('upload');
   };
 
+  // If not logged in, show the dedicated login screen with guest login option
+  if (!currentUser) {
+    return (
+      <LoginPage 
+        onLogin={handleLogin}
+        onGuestLogin={handleGuestLogin}
+      />
+    );
+  }
+
   return (
     <div className="tenderguard-app-shell">
       {/* Top Navigation & Context */}
@@ -49,6 +75,8 @@ export default function App() {
         setActiveTab={setActiveTab} 
         selectedVendor={selectedVendor}
         onResetToUpload={() => setActiveTab('upload')}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area Based on Active Category */}

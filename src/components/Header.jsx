@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Shield, CheckCircle2, AlertTriangle, FileText, Lock, ExternalLink, Info, Award } from 'lucide-react';
+import { Shield, CheckCircle2, AlertTriangle, FileText, Lock, ExternalLink, Info, Award, LogOut, UserCheck } from 'lucide-react';
 import { TENDER_DETAILS } from '../data/mockVendors';
 
-export default function Header({ activeTab, setActiveTab, selectedVendor, onResetToUpload }) {
+export default function Header({ activeTab, setActiveTab, selectedVendor, onResetToUpload, currentUser, onLogout }) {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTenderModal, setShowTenderModal] = useState(false);
 
@@ -43,9 +43,12 @@ export default function Header({ activeTab, setActiveTab, selectedVendor, onRese
       {/* Main Brand & Category Navigation Bar */}
       <div className="main-nav-container">
         <div className="brand-zone">
-          <div className="brand-logo-mark">
-            <Shield className="brand-icon" size={22} />
-            <div className="logo-sparkle"></div>
+          <div className="brand-logo-custom-wrap">
+            <img 
+              src="/tenderguard-logo.jpg" 
+              alt="TenderGuard Logo" 
+              className="brand-logo-img" 
+            />
           </div>
           <div className="brand-text">
             <div className="brand-name">
@@ -108,14 +111,37 @@ export default function Header({ activeTab, setActiveTab, selectedVendor, onRese
           </button>
         </nav>
 
-        {/* Current Active Bidder Status Tag */}
-        {selectedVendor && (
-          <div className="active-bidder-pill">
-            <span className="label">Auditing:</span>
-            <span className="vendor-name-trunc" title={selectedVendor.name}>{selectedVendor.name}</span>
-            <span className={`status-dot dot-${selectedVendor.overallStatus.toLowerCase()}`}></span>
-          </div>
-        )}
+        {/* Right Actions: Active Bidder & User Badge */}
+        <div className="header-right-actions">
+          {selectedVendor && (
+            <div className="active-bidder-pill">
+              <span className="label">Auditing:</span>
+              <span className="vendor-name-trunc" title={selectedVendor.name}>{selectedVendor.name}</span>
+              <span className={`status-dot dot-${selectedVendor.overallStatus.toLowerCase()}`}></span>
+            </div>
+          )}
+
+          {currentUser && (
+            <div className="user-profile-pill">
+              <div className="user-avatar-dot">
+                <UserCheck size={13} />
+              </div>
+              <div className="user-info-text">
+                <span className="user-name">{currentUser.name}</span>
+                <span className="user-role-badge">{currentUser.isGuest ? 'Guest Mode' : currentUser.role}</span>
+              </div>
+              {onLogout && (
+                <button 
+                  className="user-logout-btn" 
+                  onClick={onLogout}
+                  title="Sign out / Switch user"
+                >
+                  <LogOut size={13} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Zero Retention Privacy Modal */}
