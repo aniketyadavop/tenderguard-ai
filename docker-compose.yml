@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # 1. PostgreSQL Database (SQLAlchemy 2.x / Multi-Tenant Isolation)
+  # ==============================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: tenderguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tenderguard
+      POSTGRES_PASSWORD: tenderguard_secret_2026
+      POSTGRES_DB: tenderguard_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenderguard -d tenderguard_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenderguard_net
+
+  # ==============================================================================
+  # 2. Redis In-Memory Queue (Background Analysis Jobs & Rate Limiting)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: tenderguard-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenderguard_net
+
+  # ==============================================================================
+  # 3. FastAPI Backend Application (PyMuPDF / OCR / Deterministic Rules Engine)
+  # ==============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tenderguard-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=TenderGuard AI
+      - ENVIRONMENT=production
+      - API_V1_PREFIX=/api/v1
+      - DATABASE_URL=postgresql://tenderguard:tenderguard_secret_2026@db:5432/tenderguard_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=tenderguard-in-gov-procurement-secret-key-2026-production
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - ZERO_RETENTION_MODE=true
+      - MAX_UPLOAD_SIZE_BYTES=26214400
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - tenderguard_net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  tenderguard_net:
+    driver: bridge

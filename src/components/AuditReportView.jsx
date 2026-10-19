@@ -8,9 +8,11 @@ import {
   Download, 
   Lock, 
   ArrowLeft,
-  FileText
+  FileText,
+  FileSpreadsheet
 } from 'lucide-react';
 import { TENDER_DETAILS } from '../data/mockVendors';
+import api from '../services/api';
 
 export default function AuditReportView({ vendor, onBack }) {
   if (!vendor) return <div>No vendor selected</div>;
@@ -19,8 +21,20 @@ export default function AuditReportView({ vendor, onBack }) {
     window.print();
   };
 
-  const isPass = vendor.overallStatus === 'COMPLIANT';
-  const isFail = vendor.overallStatus === 'NON_COMPLIANT';
+  const handleDownloadPdf = () => {
+    if (vendor && vendor.id) {
+      api.downloadVendorPdf(vendor.id);
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    if (vendor && vendor.id) {
+      api.downloadVendorCsv(vendor.id);
+    }
+  };
+
+  const isPass = vendor.overallStatus === 'COMPLIANT' || vendor.overallStatus === 'PASS';
+  const isFail = vendor.overallStatus === 'NON_COMPLIANT' || vendor.overallStatus === 'FAIL';
 
   return (
     <div className="report-view-container">
@@ -32,9 +46,17 @@ export default function AuditReportView({ vendor, onBack }) {
         </button>
 
         <div className="report-right-actions">
-          <button className="btn btn-primary" onClick={handlePrint}>
+          <button className="btn btn-outline" onClick={handleDownloadCsv}>
+            <FileSpreadsheet size={16} />
+            <span>Download CSV (Sanitized)</span>
+          </button>
+          <button className="btn btn-primary" onClick={handleDownloadPdf}>
+            <Download size={16} />
+            <span>Download PDF Certificate</span>
+          </button>
+          <button className="btn btn-secondary" onClick={handlePrint}>
             <Printer size={16} />
-            <span>Print / Export PDF Audit Certificate</span>
+            <span>Print View</span>
           </button>
         </div>
       </div>

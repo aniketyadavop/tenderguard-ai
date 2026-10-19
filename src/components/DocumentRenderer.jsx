@@ -16,18 +16,55 @@ export default function DocumentRenderer({
 
   const { id, title, extractedData, status, boundingBoxes = [] } = documentData;
 
-  // Render specific template based on doc id
+  const docId = (id || '').toLowerCase();
+  const docTitle = (title || '').toLowerCase();
+  const docType = (documentData.document_type || documentData.dtype || '').toLowerCase();
+  const docForm = (documentData.formType || '').toLowerCase();
+
+  const isGst = docId.includes('gst') || docTitle.includes('gst') || docType.includes('gst');
+  const isPan = docId.includes('pan') || docTitle.includes('pan') || docType.includes('pan');
+  const isUdyam = docId.includes('udyam') || docTitle.includes('udyam') || docType.includes('udyam') || docId.includes('msme') || docTitle.includes('msme') || docType.includes('msme');
+  const isStartup = docId.includes('startup') || docTitle.includes('startup') || docType.includes('startup') || docId.includes('dipp') || docTitle.includes('dipp') || docForm.includes('dipp');
+  const isOem = docId.includes('oem') || docTitle.includes('oem') || docType.includes('oem') || docId.includes('maf') || docTitle.includes('maf') || docType.includes('maf');
+
+  const isFailed = status === 'NON_COMPLIANT' || status === 'FAIL' || status === 'REJECTED';
+  const isReview = status === 'REQUIRES_REVIEW' || status === 'REVIEW';
+
+  // Render specific template based on doc id / type / title
   return (
     <div 
       className="document-canvas-container"
       style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
     >
       <div className="document-sheet">
-        {id === 'doc-gst' && <GstTemplate data={extractedData} isCancelled={status === 'NON_COMPLIANT'} />}
-        {id === 'doc-pan' && <PanTemplate data={extractedData} isMismatch={status === 'NON_COMPLIANT'} />}
-        {id === 'doc-udyam' && <UdyamTemplate data={extractedData} />}
-        {id === 'doc-startup' && <StartupTemplate data={extractedData} isFlagged={status === 'REQUIRES_REVIEW'} isMissing={status === 'NON_COMPLIANT'} />}
-        {id === 'doc-oem' && <OemTemplate data={extractedData} isFaintSeal={status === 'REQUIRES_REVIEW'} />}
+        {isGst && <GstTemplate data={extractedData} isCancelled={isFailed} />}
+        {isPan && <PanTemplate data={extractedData} isMismatch={isFailed} />}
+        {isUdyam && <UdyamTemplate data={extractedData} />}
+        {isStartup && <StartupTemplate data={extractedData} isFlagged={isReview} isMissing={isFailed} />}
+        {isOem && <OemTemplate data={extractedData} isFaintSeal={isReview} />}
+
+        {!isGst && !isPan && !isUdyam && !isStartup && !isOem && (
+          <div className="doc-content doc-generic-theme" style={{ padding: '2.5rem' }}>
+            <div className="doc-header">
+              <div className="header-text">
+                <div className="gov-title">Procurement Document Verification</div>
+                <div className="cert-title">{title || 'Official Submitted Document'}</div>
+                <div className="form-num">{documentData.formType || documentData.document_type || 'Standard Format'}</div>
+              </div>
+            </div>
+            <div className="doc-divider" style={{ margin: '1.5rem 0' }}></div>
+            <div className="gst-grid">
+              {extractedData && Object.entries(extractedData).map(([k, v]) => (
+                <div className="grid-row" key={k}>
+                  <span className="field-key" style={{ textTransform: 'capitalize' }}>
+                    {k.replace(/([A-Z])/g, ' $1')}:
+                  </span>
+                  <span className="field-val font-mono font-bold">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Visual Evidence Bounding Box Overlay Layer */}
         <div className="bounding-box-overlay">

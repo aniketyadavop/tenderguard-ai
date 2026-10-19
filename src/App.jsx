@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import PreSubmissionGuide from './components/PreSubmissionGuide';
 import UploadView from './components/UploadView';
@@ -6,6 +6,7 @@ import ComplianceDashboard from './components/ComplianceDashboard';
 import EvidenceInspector from './components/EvidenceInspector';
 import AuditReportView from './components/AuditReportView';
 import LoginPage from './components/LoginPage';
+import api from './services/api';
 import { MOCK_VENDORS } from './data/mockVendors';
 import './App.css';
 
@@ -16,7 +17,7 @@ export default function App() {
   // Navigation tabs: 'guide' | 'upload' | 'dashboard' | 'inspector' | 'export'
   const [activeTab, setActiveTab] = useState('guide');
   
-  // Currently active audited vendor (defaults to TechNova for instant preview)
+  // Currently active audited vendor
   const [selectedVendor, setSelectedVendor] = useState(MOCK_VENDORS[0]);
   
   // Currently inspected document in the Evidence Inspector
@@ -25,6 +26,33 @@ export default function App() {
   // Scanning animation states
   const [isScanning, setIsScanning] = useState(false);
   const [scanStage, setScanStage] = useState(1);
+
+  // Loading skeleton and error states
+  const [isLoadingVendor, setIsLoadingVendor] = useState(false);
+  const [globalError, setGlobalError] = useState(null);
+
+  // Fetch initial vendor data on mount from FastAPI backend (or fallback)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadInitialVendor() {
+      setIsLoadingVendor(true);
+      try {
+        const freshVendor = await api.getVendorDossier('vendor-1');
+        if (isMounted && freshVendor) {
+          setSelectedVendor(freshVendor);
+          if (freshVendor.documents && freshVendor.documents.length > 0) {
+            setActiveDocId(freshVendor.documents[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('Initial vendor load used fallback benchmark:', err);
+      } finally {
+        if (isMounted) setIsLoadingVendor(false);
+      }
+    }
+    loadInitialVendor();
+    return () => { isMounted = false; };
+  }, []);
 
   const handleLogin = (userData) => {
     setCurrentUser(userData);
@@ -40,7 +68,9 @@ export default function App() {
 
   const handleVendorSelected = (vendor) => {
     setSelectedVendor(vendor);
-    setActiveDocId(vendor.documents[0].id);
+    if (vendor && vendor.documents && vendor.documents.length > 0) {
+      setActiveDocId(vendor.documents[0].id);
+    }
     setActiveTab('dashboard');
   };
 
@@ -79,52 +109,72 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Main Content Area Based on Active Category */}
+      {/* Global Error Banner if API error occurs */}
+      {globalError && (
+        <div className="global-error-strip">
+          <span>⚠️ {globalError}</span>
+          <button onClick={() => setGlobalError(null)}>Dismiss</button>
+        </div>
+      )}
+
+      {/* Main Content Area */}
       <main className="app-main-content">
-        {activeTab === 'guide' && (
-          <PreSubmissionGuide 
-            onProceedToUpload={handleProceedToUpload}
-          />
-        )}
+        {isLoadingVendor ? (
+          <div className="loading-skeleton-container">
+            <div className="skeleton-hero-card"></div>
+            <div className="skeleton-grid">
+              <div className="skeleton-card"></div>
+              <div className="skeleton-card"></div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'guide' && (
+              <PreSubmissionGuide 
+                onProceedToUpload={handleProceedToUpload}
+              />
+            )}
 
-        {activeTab === 'upload' && (
-          <UploadView 
-            onVendorSelected={handleVendorSelected}
-            selectedVendor={selectedVendor}
-            isScanning={isScanning}
-            setIsScanning={setIsScanning}
-            scanStage={scanStage}
-            setScanStage={setScanStage}
-          />
-        )}
+            {activeTab === 'upload' && (
+              <UploadView 
+                onVendorSelected={handleVendorSelected}
+                selectedVendor={selectedVendor}
+                isScanning={isScanning}
+                setIsScanning={setIsScanning}
+                scanStage={scanStage}
+                setScanStage={setScanStage}
+              />
+            )}
 
-        {activeTab === 'dashboard' && (
-          <ComplianceDashboard 
-            vendor={selectedVendor}
-            onInspectDocument={handleInspectDocument}
-            onViewReport={handleViewReport}
-            onChangeVendor={() => setActiveTab('upload')}
-          />
-        )}
+            {activeTab === 'dashboard' && (
+              <ComplianceDashboard 
+                vendor={selectedVendor}
+                onInspectDocument={handleInspectDocument}
+                onViewReport={handleViewReport}
+                onChangeVendor={() => setActiveTab('upload')}
+              />
+            )}
 
-        {activeTab === 'inspector' && (
-          <EvidenceInspector 
-            vendor={selectedVendor}
-            activeDocId={activeDocId}
-            setActiveDocId={setActiveDocId}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-          />
-        )}
+            {activeTab === 'inspector' && (
+              <EvidenceInspector 
+                vendor={selectedVendor}
+                activeDocId={activeDocId}
+                setActiveDocId={setActiveDocId}
+                onBackToDashboard={() => setActiveTab('dashboard')}
+              />
+            )}
 
-        {activeTab === 'export' && (
-          <AuditReportView 
-            vendor={selectedVendor}
-            onBack={() => setActiveTab('dashboard')}
-          />
+            {activeTab === 'export' && (
+              <AuditReportView 
+                vendor={selectedVendor}
+                onBack={() => setActiveTab('dashboard')}
+              />
+            )}
+          </>
         )}
       </main>
 
-      {/* Mode-style clean minimal footer */}
+      {/* Minimal Footer */}
       <footer className="app-footer-bar no-print">
         <div className="footer-content">
           <div className="f-left">

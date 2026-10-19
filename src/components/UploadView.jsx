@@ -11,8 +11,10 @@ import {
   Cpu,
   Layers,
   FileCheck,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import api from '../services/api';
 import { MOCK_VENDORS } from '../data/mockVendors';
 
 export default function UploadView({ 
@@ -25,19 +27,89 @@ export default function UploadView({
 }) {
   const [dragActive, setDragActive] = useState(false);
   const [customFiles, setCustomFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
   const fileInputRef = useRef(null);
 
-  const startScanningSimulation = (vendor) => {
+  // Starts analysis either from backend API or falls back gracefully
+  const runLiveAudit = async (vendorMeta, uploadedFileObjs = []) => {
     setIsScanning(true);
     setScanStage(1);
+    setErrorMessage(null);
 
-    setTimeout(() => setScanStage(2), 700);
-    setTimeout(() => setScanStage(3), 1400);
-    setTimeout(() => setScanStage(4), 2100);
-    setTimeout(() => {
+    try {
+      if (uploadedFileObjs.length > 0) {
+        // Real file upload pipeline
+        setIsUploading(true);
+        const uploadedMetaList = [];
+
+        for (let i = 0; i < uploadedFileObjs.length; i++) {
+          const file = uploadedFileObjs[i];
+          const uploadRes = await api.uploadDocumentWithProgress(file, (pct) => {
+            setUploadProgress(Math.round(((i + pct / 100) / uploadedFileObjs.length) * 100));
+          });
+          uploadedMetaList.push({
+            file_id: uploadRes.file_id,
+            file_name: uploadRes.file_name,
+            storage_path: `uploads/${uploadRes.file_id}.pdf`,
+            document_type_hint: file.name.toUpperCase()
+          });
+        }
+        setIsUploading(false);
+        setUploadProgress(100);
+
+        // Start background verification job
+        const jobRes = await api.startAnalysis({
+          vendor_id: vendorMeta.id,
+          vendor_name: vendorMeta.name,
+          organization_id: 'org-gem-meity',
+          tender_id: 'GeM/2026/B/89412',
+          uploaded_files: uploadedMetaList
+        });
+
+        // Poll job status through stages 1 to 4
+        let completed = false;
+        let attempts = 0;
+        while (!completed && attempts < 30) {
+          await new Promise(r => setTimeout(r, 600));
+          attempts++;
+          try {
+            const statusRes = await api.getJobStatus(jobRes.job_id);
+            if (statusRes.current_stage) {
+              setScanStage(statusRes.current_stage);
+            }
+            if (statusRes.status === 'COMPLETED') {
+              completed = true;
+              break;
+            } else if (statusRes.status === 'FAILED') {
+              throw new Error(statusRes.error_message || 'Verification pipeline encountered a processing error.');
+            }
+          } catch (e) {
+            console.warn('Polling error, continuing...', e);
+          }
+        }
+      } else {
+        // Benchmark vendor: Step through stages
+        setScanStage(1);
+        await new Promise(r => setTimeout(r, 500));
+        setScanStage(2);
+        await new Promise(r => setTimeout(r, 600));
+        setScanStage(3);
+        await new Promise(r => setTimeout(r, 600));
+        setScanStage(4);
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // Fetch verified vendor dossier from API (or fallback)
+      const freshDossier = await api.getVendorDossier(vendorMeta.id);
       setIsScanning(false);
-      onVendorSelected(vendor);
-    }, 2800);
+      onVendorSelected(freshDossier);
+    } catch (err) {
+      setIsScanning(false);
+      setIsUploading(false);
+      setErrorMessage(err.message || 'Verification failed. Please check your files and try again.');
+    }
   };
 
   const handleDrag = (e) => {
@@ -66,19 +138,40 @@ export default function UploadView({
   };
 
   const handleFiles = (files) => {
-    const fileList = Array.from(files).map((f) => ({
+    const rawFiles = Array.from(files);
+    const fileList = rawFiles.map((f) => ({
       name: f.name,
       size: (f.size / (1024 * 1024)).toFixed(2) + " MB",
-      type: f.type || "PDF Document"
+      type: f.type || "PDF Document",
+      rawFile: f
     }));
     setCustomFiles(fileList);
-    // Trigger scan using default compliant vendor template as base
-    startScanningSimulation(MOCK_VENDORS[0]);
+    setUploadProgress(0);
+
+    // Create a new vendor onboarding container and run pipeline
+    const newVendorMeta = {
+      id: `vendor-upload-${Date.now()}`,
+      name: rawFiles[0].name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9\s]/g, " ") + " Pvt. Ltd."
+    };
+    runLiveAudit(newVendorMeta, rawFiles);
   };
 
   return (
     <div className="upload-view-container">
-      {/* Scanning Overlay Animation */}
+      {/* Actionable Error Alert */}
+      {errorMessage && (
+        <div className="error-alert-banner">
+          <div className="error-left">
+            <AlertCircle size={20} className="text-danger" />
+            <div>
+              <strong>Upload & Verification Error:</strong> {errorMessage}
+            </div>
+          </div>
+          <button className="btn-close-alert" onClick={() => setErrorMessage(null)}>×</button>
+        </div>
+      )}
+
+      {/* Scanning & Progress Overlay Modal */}
       {isScanning && (
         <div className="scanning-overlay-modal">
           <div className="scanning-card">
@@ -88,10 +181,22 @@ export default function UploadView({
               <div className="radar-ring r2"></div>
             </div>
 
-            <h3 className="scan-title">TenderGuard AI Engine In Progress</h3>
+            <h3 className="scan-title">
+              {isUploading ? `Uploading Documents (${uploadProgress}%)` : 'TenderGuard AI Engine In Progress'}
+            </h3>
             <p className="scan-desc">
               Cross-referencing extracted OCR tokens against GeM Tender Ref: <strong>GeM/2026/B/89412</strong>
             </p>
+
+            {/* Real-Time Upload Progress Bar */}
+            {uploadProgress > 0 && uploadProgress < 100 && (
+              <div className="upload-progress-track">
+                <div 
+                  className="upload-progress-fill" 
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            )}
 
             <div className="scan-stepper">
               <div className={`scan-step ${scanStage >= 1 ? 'step-done' : ''} ${scanStage === 1 ? 'step-active' : ''}`}>
@@ -130,7 +235,7 @@ export default function UploadView({
                 </div>
                 <div className="step-txt">
                   <span className="s-title">Explainability Tree & Evidence Generation</span>
-                  <span className="s-desc">Creating plain English justification & visual proof crops</span>
+                  <span className="s-desc">Persisting findings and generating cryptographic audit hashes</span>
                 </div>
               </div>
             </div>
@@ -215,7 +320,7 @@ export default function UploadView({
               {/* Option 1: Fully Compliant */}
               <div 
                 className={`vendor-choice-card choice-compliant ${selectedVendor?.id === 'vendor-1' ? 'choice-selected' : ''}`}
-                onClick={() => startScanningSimulation(MOCK_VENDORS[0])}
+                onClick={() => runLiveAudit({ id: 'vendor-1', name: 'TechNova Infotech Pvt. Ltd.' })}
               >
                 <div className="choice-top">
                   <div className="choice-badge badge-pass">
@@ -242,7 +347,7 @@ export default function UploadView({
               {/* Option 2: Disqualified (Expired GST + PAN Mismatch) */}
               <div 
                 className={`vendor-choice-card choice-rejected ${selectedVendor?.id === 'vendor-2' ? 'choice-selected' : ''}`}
-                onClick={() => startScanningSimulation(MOCK_VENDORS[1])}
+                onClick={() => runLiveAudit({ id: 'vendor-2', name: 'Apex Global Systems Ltd.' })}
               >
                 <div className="choice-top">
                   <div className="choice-badge badge-fail">
@@ -269,7 +374,7 @@ export default function UploadView({
               {/* Option 3: Requires Human Review */}
               <div 
                 className={`vendor-choice-card choice-review ${selectedVendor?.id === 'vendor-3' ? 'choice-selected' : ''}`}
-                onClick={() => startScanningSimulation(MOCK_VENDORS[2])}
+                onClick={() => runLiveAudit({ id: 'vendor-3', name: 'Bharat Cloud Dynamics LLP' })}
               >
                 <div className="choice-top">
                   <div className="choice-badge badge-review">
