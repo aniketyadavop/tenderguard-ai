@@ -25,3 +25,4 @@ npm run dev
 1. **Scenario 1: TechNova Infotech Pvt. Ltd.** -> Fully Compliant (All 5 verified, qualifies for MSME EMD waiver and DPIIT turnover exemption)
 2. **Scenario 2: Apex Global Systems Ltd.** -> Disqualified (Expired GST certificate from 2024 + PAN-GSTIN mismatch)
 3. **Scenario 3: Bharat Cloud Dynamics LLP** -> Requires Human Review (Faint OEM seal with 64% OCR confidence + Startup 10-year limit expiring within 60 days)
+readme
